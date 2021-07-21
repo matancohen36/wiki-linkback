@@ -5,8 +5,12 @@ from html.parser import HTMLParser
 from urllib.parse import urlparse, urljoin
 from queue import Queue 
 import threading
+import time
 
-NUMBER_OF_THREADS = 7
+
+DOMAIN = 'wikipedia.org'
+NUMBER_OF_THREADS = 20
+
 
 
 class WikiScrapper(HTMLParser):
@@ -34,7 +38,7 @@ class WikiScrapper(HTMLParser):
         # overrides super method, called for each html tag.
         if tag != 'a':
             return 
-
+        
         for key, value in attrs:
             if key != "href":
                 continue
@@ -66,9 +70,9 @@ def extract_links(content, filter_func=None):
 def get_links_from_url(url, filter_func=None):
     #Gets url source-code and extract all urls from it 
         with urllib.request.urlopen(url) as response:
-            #Decoding the resualt into str
-            data=response.read().decode("utf-8", errors = 'ignore' ) 
-            return extract_links(data, filter_func)
+            #Decoding the result into str
+            page_data = response.read().decode("utf-8", errors = 'ignore' ) 
+            return extract_links(page_data, filter_func)
 
 def generate_absoulte_url(input_url, link): 
     #util function to format the links
@@ -82,7 +86,6 @@ def generate_relative_link(input_url):
 def measure(f):
     #measuring the time of the script 
     def wrapper(*args, **kwargs):
-        import time
         start_time = time.time()
         res = f(*args, **kwargs)
         print("--- %s took %s seconds ---" % (f.__name__, time.time() - start_time))
@@ -93,7 +96,7 @@ def measure(f):
 def worker_func(work_queue, results, filter_for_self_links):
     while not work_queue.empty():
         # gets the worker "task"from the queue url in that case.
-        url = work_queue.get_nowait()
+        url = work_queue.get()
         # gets all links from curr url and filtering if there is linkback
         curr_url_links = get_links_from_url(url, filter_for_self_links)
         if len(curr_url_links):
@@ -103,6 +106,11 @@ def worker_func(work_queue, results, filter_for_self_links):
 
 @measure
 def main(input_url):
+    # making sure ur input is wikipedia only
+    if DOMAIN not in urlparse(input_url).netloc :
+        print('Please run it with wikipedia page')
+        return
+
     output_urls=[]
 
     # Generate filter function for returning to self link
@@ -110,12 +118,13 @@ def main(input_url):
     filter_for_self_links = lambda x: x.lower() == relative_link
     
     # Get all of links from url webpage source code
+    init_start_time = time.time()
     self_links = get_links_from_url(input_url, is_wiki_page)
-
+    print("self links gathering took:%s" % (time.time() - init_start_time))
     # Prepare work queue
     q = Queue()
     for link in self_links:
-        # to prevent duplicate of self link 
+        # to prevent counting the original input url 
         if filter_for_self_links(link):
             continue
         #formatting the link to url before pushing into the workqueue
@@ -123,6 +132,7 @@ def main(input_url):
         q.put(url)
 
     # Launch threads to process work queue
+    workers_procces_start_time = time.time()
     for i in range(NUMBER_OF_THREADS):
         worker = threading.Thread(target=worker_func, daemon=True,
                                   args=(q, output_urls, filter_for_self_links,))
@@ -130,12 +140,16 @@ def main(input_url):
 
     # Wait for work queue to be empty.
     q.join()
-
+    print("getting workers work :%s" % (time.time() - workers_procces_start_time))
     # Print results
-    print("Done, All links from %s that link back are (Total of %d):" % (input_url, len(output_urls)))
-    pprint(output_urls)
+    print("Done, All links from %s that link back are (Total of %d) and waiting for u in: %s_wiki_linkbacks.txt" % (input_url, len(output_urls) ,relative_link[6:] ))
+    with open("%s_wiki_linkbacks.txt" % (relative_link[6:]), 'w') as f:
+        f.writelines("%s\n" % url  for url in output_urls)
+    # print("Done, All links from %s that link back are (Total of %d):" % (input_url, len(output_urls)))
+    # pprint(output_urls)
 
-# trigger main only if ran as executable
+
+# # trigger main only if ran as execute
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: %s <inputLink>" % sys.argv[0])
