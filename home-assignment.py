@@ -120,7 +120,7 @@ def main(input_url):
     # Get all of links from url webpage source code
     init_start_time = time.time()
     self_links = get_links_from_url(input_url, is_wiki_page)
-    print("self links gathering took:%s" % (time.time() - init_start_time))
+    print("input_url links gathering took:%s seconds" % (time.time() - init_start_time))
     # Prepare work queue
     q = Queue()
     for link in self_links:
@@ -140,11 +140,12 @@ def main(input_url):
 
     # Wait for work queue to be empty.
     q.join()
-    print("getting workers work :%s" % (time.time() - workers_procces_start_time))
+    print("getting workers proccesed work took:%s seconds" % (time.time() - workers_procces_start_time))
     # Print results
     print("Done, All links from %s that link back are (Total of %d) and waiting for u in: %s_wiki_linkbacks.txt" % (input_url, len(output_urls) ,relative_link[6:] ))
     with open("%s_wiki_linkbacks.txt" % (relative_link[6:]), 'w') as f:
         f.writelines("%s\n" % url  for url in output_urls)
+        #to get output by print just exclude from comment the lines below
     # print("Done, All links from %s that link back are (Total of %d):" % (input_url, len(output_urls)))
     # pprint(output_urls)
 
